@@ -186,7 +186,7 @@ function changeSong(song, sync = false) {
   if (sync) connection?.send({ type: "song", id: song.id });
   if (state.active) {
     sendSeat();
-    message(state.joined ? "Пісню змінено. Підтвердьте готовність." : "Запроси друга за посиланням.");
+    if (state.voice) message("Пісню змінено. Підтвердьте готовність.");
   }
   render();
 }
@@ -482,6 +482,15 @@ if (hasInvite) {
   $("hero-description").textContent = validInvite ? "Приєднуйся до кімнати. Твоя партія буде червоною." : "Попроси друга надіслати нове запрошення.";
   $("enter").textContent = validInvite ? "Приєднатися до дуету ↗" : "На головну ↗";
   if (!validInvite) $("enter").onclick = () => location.assign("./");
+  $("catalog-link").onclick = (event) => {
+    event.preventDefault();
+    $("catalog").scrollIntoView();
+  };
 }
+
+window.addEventListener("hashchange", () => {
+  const next = new URLSearchParams(location.hash.slice(1));
+  if ((next.get("room") || "") !== roomId || (next.get("key") || "") !== inviteKey) location.reload();
+});
 
 render();
