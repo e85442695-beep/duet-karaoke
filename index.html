@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#11121c">
+  <meta name="description" content="Створи кімнату, запроси друга та співайте українські пісні вдвох.">
+  <title>Дует · Караоке для двох</title>
+  <link rel="icon" href="./favicon.png" type="image/png">
+  <link rel="stylesheet" href="./style.css">
+  <script src="./vendor/peerjs.min.js" defer></script>
+  <script src="./app.js" type="module"></script>
+</head>
+<body>
+  <header class="top shell">
+    <a class="brand" href="./" aria-label="Дует, головна"><span class="mark" aria-hidden="true"><i></i><i></i></span>Дует</a>
+    <a class="nav-link" id="catalog-link" href="#catalog">Пісні</a>
+    <button class="quiet" id="leave" type="button" hidden>Вийти з кімнати</button>
+  </header>
+  <main class="shell">
+    <section id="landing" class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="kicker"><span></span> Караоке для двох</p>
+        <h1 id="hero-title">Співайте<br>вдвох<span>.</span></h1>
+        <p id="hero-description">Запроси друга, обери пісню й підхоплюйте куплети одне за одним.</p>
+        <button class="primary" id="enter" type="button">Створити кімнату <span aria-hidden="true">↗</span></button>
+        <p id="landing-status" class="status" role="status"></p>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="art-lines"></div>
+        <div class="record"><div class="record-label"><div class="record-hole"></div></div></div>
+        <div class="part-tag tag-blue"><span></span> Синя партія</div>
+        <div class="part-tag tag-red"><span></span> Червона партія</div>
+      </div>
+    </section>
+
+    <section id="room" class="room" aria-labelledby="room-title" hidden>
+      <div class="room-header">
+        <div><p class="kicker"><span></span> Кімната дуету</p><h1 id="room-title" tabindex="-1">Ваша сцена</h1></div>
+        <button id="copy" class="quiet" type="button">Скопіювати запрошення <span aria-hidden="true">↗</span></button>
+      </div>
+      <div class="room-layout">
+        <section class="stage" aria-labelledby="stage-title">
+          <div class="stage-heading"><h2 id="stage-title">Пісня</h2><span id="stage-time">0:00 / 0:00</span></div>
+          <div id="lyric-stage" class="lyric-stage" data-part="blue">
+            <p id="part-label" class="part-label"></p>
+            <p id="current-line" class="current-line"></p>
+            <p id="next-line" class="next-line"></p>
+          </div>
+          <progress id="progress" aria-label="Позиція пісні" max="1" value="0"></progress>
+          <div class="transport">
+            <button id="start" class="primary" type="button" disabled>Почати співати</button>
+            <button id="stop" class="quiet" type="button" hidden>Зупинити</button>
+          </div>
+        </section>
+        <aside class="room-controls" aria-label="Учасники та звук">
+          <h2>Учасники <span id="occupancy">1 / 2</span></h2>
+          <div id="blue-seat" class="seat blue"><span class="seat-dot"></span><div><strong>Синя партія</strong><small></small></div></div>
+          <div id="red-seat" class="seat red"><span class="seat-dot"></span><div><strong>Червона партія</strong><small></small></div></div>
+          <div class="mic-controls">
+            <button id="mic" class="quiet" type="button">Увімкнути мікрофон</button>
+            <button id="ready" class="quiet" type="button" disabled>Готовий</button>
+          </div>
+          <div class="mix">
+            <label>Музика <input id="music-volume" type="range" min="0" max="100" value="75"></label>
+            <label>Голос друга <input id="voice-volume" type="range" min="0" max="100" value="100"></label>
+          </div>
+          <p id="room-status" class="status" role="status"></p>
+          <button id="retry" class="quiet" type="button" hidden>Підключитися знову</button>
+          <button id="unlock" class="quiet" type="button" hidden>Увімкнути звук друга</button>
+        </aside>
+      </div>
+    </section>
+
+    <section id="catalog" class="catalog" aria-labelledby="catalog-title">
+      <div class="section-heading"><h2 id="catalog-title">Пісні</h2><p>Українські народні мелодії</p></div>
+      <div id="song-list" class="song-list"></div>
+      <p id="catalog-status" class="status" role="status"></p>
+    </section>
+  </main>
+  <footer class="footer shell"><span>Дует</span><span>Голоси не записуються</span></footer>
+</body>
+</html>
