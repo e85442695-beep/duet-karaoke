@@ -120,6 +120,11 @@ progress::-webkit-progress-bar { background: #36374d; }
 progress::-webkit-progress-value { background: var(--peach); }
 progress::-moz-progress-bar { background: var(--peach); }
 .transport, .mic-controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.lyric-sync { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; color: var(--muted); font-size: .875rem; }
+.lyric-sync[hidden] { display: none; }
+.lyric-sync > span { margin-right: 4px; }
+.lyric-sync strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.lyric-sync .quiet { min-height: 38px; padding: 6px 12px; }
 .room-controls h2 { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
 .room-controls h2 span { color: var(--muted); font-size: .8rem; letter-spacing: 0; }
 .seat { display: flex; align-items: center; gap: 12px; min-height: 54px; padding: 9px 0; border-bottom: 1px solid var(--line); }

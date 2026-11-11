@@ -35,6 +35,7 @@ let searchRequest;
 let selectedTrack;
 let trackResults = [];
 let lyricTimeline;
+let lyricOffset = 0;
 const music = () => state.song.videoId ? video : audio;
 const songDuration = () => {
   if (state.song.videoId) return video.duration;
@@ -89,6 +90,7 @@ function render() {
   $("start").disabled = !canStart();
   $("start").textContent = playback || finished ? "Почати спочатку" : "Почати співати";
   $("stop").hidden = !host || !playback;
+  renderSync();
   for (const button of $("song-list").children) {
     const selected = button.dataset.song === state.song.id;
     button.setAttribute("aria-pressed", selected);
@@ -108,6 +110,7 @@ function renderLyrics() {
     $("timing-note").hidden = !lyricTimeline.approximate;
   }
   const { lines, intro } = lyricTimeline;
+  const at = position === null ? null : position - lyricOffset;
   const first = lines[0];
   const firstText = first?.text || (song.videoId ? "Текст у відео" : "Текст із таймкодами відсутній");
   let part = first?.part || "blue";
@@ -118,12 +121,12 @@ function renderLyrics() {
     label = "Починаємо за";
     line = String(Math.max(1, Math.ceil(-position)));
     next = first ? "Перший рядок · " + firstText : "";
-  } else if (position !== null && position < intro) {
+  } else if (position !== null && at < intro) {
     label = "Вступ";
     line = "Приготуйся співати";
     next = "Перший рядок · " + firstText;
   } else if (position !== null) {
-    const index = lines.findIndex((cue) => position >= cue.start && position < cue.start + cue.duration);
+    const index = lines.findIndex((cue) => at >= cue.start && at < cue.start + cue.duration);
     if (index >= 0) {
       const cue = lines[index];
       const upcoming = lines[index + 1];
@@ -132,7 +135,7 @@ function renderLyrics() {
       line = cue.text;
       next = upcoming ? "Далі · " + upcoming.text : "Останній рядок";
     } else if (song.videoId || song.audioUrl) {
-      const upcoming = lines.find((cue) => cue.start > position);
+      const upcoming = lines.find((cue) => cue.start > at);
       label = song.videoId && !video.playing ? "Відео запускається" : "Караоке";
       line = first ? "Музична пауза" : song.videoId ? "Співайте за текстом у відео" : "Грає мінусовка";
       next = upcoming ? "Далі · " + upcoming.text : "";
@@ -163,6 +166,36 @@ function renderLyrics() {
   $("progress").max = total || 1;
   $("progress").value = elapsed;
 }
+
+function syncable() {
+  return state.active && !!(state.song.videoId || state.song.audioUrl) && state.song.timing !== "none" && state.song.lines.length > 0;
+}
+
+function renderSync() {
+  $("lyric-sync").hidden = !syncable();
+  const tenths = Math.round(lyricOffset * 10) / 10;
+  $("sync-value").textContent = (tenths > 0 ? "+" : tenths < 0 ? "−" : "") + Math.abs(tenths).toFixed(1) + " с";
+  $("sync-reset").hidden = tenths === 0;
+  $("sync-first").hidden = !playback;
+}
+
+function setOffset(value, send = true) {
+  lyricOffset = Math.max(-60, Math.min(60, Math.round(value * 10) / 10));
+  lastLyrics = "";
+  if (send) connection?.send({ type: "offset", song: state.song.id, value: lyricOffset });
+  renderSync();
+  renderLyrics();
+}
+
+$("sync-earlier").onclick = () => setOffset(lyricOffset - 0.5);
+$("sync-later").onclick = () => setOffset(lyricOffset + 0.5);
+$("sync-reset").onclick = () => setOffset(0);
+$("sync-first").onclick = () => {
+  const position = music().position;
+  const first = lyricTimeline?.lines[0];
+  if (position === null || position < 0 || !first) return;
+  setOffset(position - first.start);
+};
 
 function tick() {
   if (!playback) return;
@@ -218,6 +251,7 @@ function changeSong(song, sync = false) {
   endPlayback();
   video.clear();
   state.song = song;
+  lyricOffset = 0;
   state.me.ready = false;
   state.other.ready = false;
   if (sync) sendSong();
@@ -283,6 +317,9 @@ function onMessage(data) {
       if (!host && song) changeSong(song);
       break;
     }
+    case "offset":
+      if (data.song === state.song.id && Number.isFinite(data.value)) setOffset(data.value, false);
+      break;
     case "ping":
       if (host && Number.isFinite(data.sent)) connection.send({ type: "pong", sent: data.sent, hostAt: clock() });
       break;
@@ -355,8 +392,10 @@ function onConnection(event, remote) {
     state.joined = true;
     $("retry").hidden = true;
     message("Обидва в кімнаті. Увімкніть мікрофони.");
-    if (host) sendSong();
-    else {
+    if (host) {
+      sendSong();
+      if (lyricOffset) connection.send({ type: "offset", song: state.song.id, value: lyricOffset });
+    } else {
       syncClock();
       setTimeout(syncClock, 250);
       setTimeout(syncClock, 750);

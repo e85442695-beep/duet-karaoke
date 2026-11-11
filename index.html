@@ -52,6 +52,13 @@
           </div>
           <progress id="progress" aria-label="Позиція пісні" max="1" value="0"></progress>
           <p id="timing-note" class="status" hidden>Орієнтовний таймінг тексту</p>
+          <div id="lyric-sync" class="lyric-sync" role="group" aria-label="Підлаштування тексту під музику" hidden>
+            <span>Текст <strong id="sync-value">0.0 с</strong></span>
+            <button id="sync-earlier" class="quiet" type="button">Раніше</button>
+            <button id="sync-later" class="quiet" type="button">Пізніше</button>
+            <button id="sync-first" class="quiet" type="button" hidden>Почали співати перший рядок</button>
+            <button id="sync-reset" class="text-button" type="button" hidden>Скинути</button>
+          </div>
           <div class="transport">
             <button id="start" class="primary" type="button" disabled>Почати співати</button>
             <button id="stop" class="quiet" type="button" hidden>Зупинити</button>

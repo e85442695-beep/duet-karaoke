@@ -117,7 +117,9 @@ export function adaptLyrics(song, mediaDuration) {
     }
   }
   const estimated = reference.timing === "estimated";
-  const scale = Math.abs(reference.duration - duration) > 2 ? duration / reference.duration : 1;
+  // Karaoke videos usually differ by a longer intro or outro, not by tempo, so stretching
+  // every timestamp makes lines drift. Only stretch when the length differs a lot.
+  const scale = Math.abs(reference.duration - duration) > reference.duration * 0.12 ? duration / reference.duration : 1;
   const lines = estimated ? estimate(reference.lines, duration) : reference.lines.map((line) => ({
     ...line, start: line.start * scale, duration: line.duration * scale,
   }));
