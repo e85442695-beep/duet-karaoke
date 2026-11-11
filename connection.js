@@ -47,7 +47,7 @@ export class DuetConnection {
         }
       } else if (!this.#data) {
         this.#bind(peer.connect(this.#room.id, {
-          serialization: "json",
+          serialization: "binary",
           reliable: true,
           metadata: { key: this.#room.key },
         }));

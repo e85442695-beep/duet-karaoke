@@ -9,6 +9,7 @@ export class DuetAudio {
   #startAt = 0;
 
   get ready() { return !!this.#buffer && this.#context?.state === "running"; }
+  duration(song) { return this.#selected === song.id ? this.#buffer?.duration || 0 : 0; }
   get position() { return this.#source ? this.#context.currentTime - this.#startAt : null; }
 
   async unlock() {
@@ -27,7 +28,10 @@ export class DuetAudio {
     if (this.#selected === song.id && this.#buffer) return;
     this.#selected = song.id;
     this.#buffer = null;
-    const response = await fetch(new URL("./audio/" + song.id + ".mp3", import.meta.url));
+    const url = song.audioUrl || new URL("./audio/" + song.id + ".mp3", import.meta.url);
+    const response = await fetch(url, {
+      credentials: "omit", referrerPolicy: "no-referrer", signal: AbortSignal.timeout?.(20000),
+    });
     if (!response.ok) throw new Error("Backing track unavailable");
     const buffer = await this.#context.decodeAudioData(await response.arrayBuffer());
     if (this.#selected === song.id) this.#buffer = buffer;

@@ -14,7 +14,7 @@
 <body>
   <header class="top shell">
     <a class="brand" href="./" aria-label="Дует, головна"><span class="mark" aria-hidden="true"><i></i><i></i></span>Дует</a>
-    <a class="nav-link" id="catalog-link" href="#catalog">Пісні</a>
+    <a class="nav-link" id="catalog-link" href="#catalog">Пошук пісень</a>
     <button class="quiet" id="leave" type="button" hidden>Вийти з кімнати</button>
   </header>
   <main class="shell">
@@ -22,7 +22,7 @@
       <div class="hero-copy">
         <p class="kicker"><span></span> Караоке для двох</p>
         <h1 id="hero-title">Співайте<br>вдвох<span>.</span></h1>
-        <p id="hero-description">Запроси друга, обери пісню й підхоплюйте куплети одне за одним.</p>
+        <p id="hero-description">Запроси друга, знайди свою пісню й підхоплюйте куплети одне за одним.</p>
         <button class="primary" id="enter" type="button">Створити кімнату <span aria-hidden="true">↗</span></button>
         <p id="landing-status" class="status" role="status"></p>
       </div>
@@ -37,7 +37,10 @@
     <section id="room" class="room" aria-labelledby="room-title" hidden>
       <div class="room-header">
         <div><p class="kicker"><span></span> Кімната дуету</p><h1 id="room-title" tabindex="-1">Ваша сцена</h1></div>
-        <button id="copy" class="quiet" type="button">Скопіювати запрошення <span aria-hidden="true">↗</span></button>
+        <div id="host-actions" class="host-actions">
+          <a class="quiet" href="#catalog">Знайти пісню</a>
+          <button id="copy" class="quiet" type="button">Скопіювати запрошення <span aria-hidden="true">↗</span></button>
+        </div>
       </div>
       <div class="room-layout">
         <section class="stage" aria-labelledby="stage-title">
@@ -52,6 +55,8 @@
             <button id="start" class="primary" type="button" disabled>Почати співати</button>
             <button id="stop" class="quiet" type="button" hidden>Зупинити</button>
           </div>
+          <div id="video-stage" class="video-stage" hidden></div>
+          <button id="video-resume" class="quiet" type="button" hidden>Увімкнути відео</button>
         </section>
         <aside class="room-controls" aria-label="Учасники та звук">
           <h2>Учасники <span id="occupancy">1 / 2</span></h2>
@@ -73,7 +78,31 @@
     </section>
 
     <section id="catalog" class="catalog" aria-labelledby="catalog-title">
-      <div class="section-heading"><h2 id="catalog-title">Пісні</h2><p>Українські народні мелодії</p></div>
+      <div class="section-heading"><h2 id="catalog-title">Знайди свою пісню</h2></div>
+      <div id="search-tools">
+        <form id="song-search" class="song-search" role="search">
+          <label class="sr-only" for="search-query">Назва пісні або виконавець</label>
+          <input id="search-query" type="search" maxlength="120" placeholder="Назва пісні або виконавець" required>
+          <button class="primary" type="submit">Знайти</button>
+        </form>
+        <p id="search-status" class="status" role="status"></p>
+        <div id="search-results" class="song-list search-results" aria-label="Результати пошуку"></div>
+        <button id="open-video-form" class="text-button" type="button">У мене є посилання на караоке</button>
+        <form id="video-form" class="video-form" hidden>
+          <h3 id="video-title">Додати караоке</h3>
+          <a id="find-backing" class="text-button" target="_blank" rel="noopener noreferrer">Знайти мінусовку на YouTube ↗</a>
+          <label for="video-url">Посилання на YouTube або аудіофайл</label>
+          <div class="song-search">
+            <input id="video-url" type="text" inputmode="url" maxlength="500" placeholder="https://www.youtube.com/watch?v=…" required>
+            <button id="select-video" class="primary" type="submit">Обрати пісню</button>
+          </div>
+          <label id="offset-label" class="offset-label" hidden>Зсув тексту, секунди
+            <input id="lyric-offset" type="number" min="-120" max="120" step="0.1" value="0">
+          </label>
+          <p id="video-status" class="status" role="status"></p>
+        </form>
+      </div>
+      <h3 class="starter-heading">Готові фонограми</h3>
       <div id="song-list" class="song-list"></div>
       <p id="catalog-status" class="status" role="status"></p>
     </section>

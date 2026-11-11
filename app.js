@@ -1,9 +1,12 @@
 import { songs } from "./songs.js";
 import { DuetAudio } from "./audio.js";
 import { clock, DuetConnection } from "./connection.js";
+import { backingAudioUrl, externalSong, searchTracks, validateExternalSong, youtubeId } from "./song-search.js";
+import { VideoTrack } from "./video.js";
 
 const $ = (id) => document.getElementById(id);
 const audio = new DuetAudio();
+const video = new VideoTrack($("video-stage"), onVideo);
 const invite = new URLSearchParams(location.hash.slice(1));
 const roomId = invite.get("room") || "";
 const inviteKey = invite.get("key") || "";
@@ -26,6 +29,14 @@ let frame = 0;
 let lastLyrics = "";
 let micPending = false;
 let readyPending = false;
+let lastVideoSync = 0;
+let searchRequest;
+let selectedTrack;
+const music = () => state.song.videoId ? video : audio;
+const songDuration = () => {
+  if (state.song.videoId) return video.duration;
+  return state.song.audioUrl ? audio.duration(state.song) : state.song.duration;
+};
 
 function id(length) {
   return [...crypto.getRandomValues(new Uint8Array(length))]
@@ -50,7 +61,7 @@ function seat(part, value, own) {
 }
 
 function canStart() {
-  return host && state.joined && state.voice && state.me.ready && state.other.ready && audio.ready;
+  return host && state.joined && state.voice && state.me.ready && state.other.ready && music().ready;
 }
 
 function render() {
@@ -58,7 +69,8 @@ function render() {
   $("room").hidden = !state.active;
   $("leave").hidden = !state.active;
   $("catalog-link").hidden = state.active;
-  $("copy").hidden = !host;
+  $("host-actions").hidden = !host;
+  $("search-tools").hidden = !host;
   $("occupancy").textContent = state.joined ? "2 / 2" : "1 / 2";
   seat(ownPart, state.me, true);
   seat(otherPart, state.other, false);
@@ -84,21 +96,23 @@ function render() {
 }
 
 function renderLyrics() {
-  const position = audio.position;
   const song = state.song;
   const first = song.lines[0];
-  let part = first.part;
+  const position = music().position;
+  const total = songDuration();
+  const firstText = first?.text || (song.videoId ? "Текст у відео" : "Текст із таймкодами відсутній");
+  let part = first?.part || "blue";
   let label = "До початку";
-  let line = first.text;
+  let line = firstText;
   let next = song.lines[1]?.text || "";
   if (position !== null && position < 0) {
     label = "Починаємо за";
     line = String(Math.max(1, Math.ceil(-position)));
-    next = "Перший рядок · " + first.text;
+    next = first ? "Перший рядок · " + firstText : "";
   } else if (position !== null && position < song.intro) {
     label = "Вступ";
     line = "Приготуйся співати";
-    next = "Перший рядок · " + first.text;
+    next = "Перший рядок · " + firstText;
   } else if (position !== null) {
     const index = song.lines.findIndex((cue) => position >= cue.start && position < cue.start + cue.duration);
     if (index >= 0) {
@@ -108,6 +122,11 @@ function renderLyrics() {
       label = (part === ownPart ? "Твоя партія" : "Партія друга") + (part === "blue" ? " · синя" : " · червона");
       line = cue.text;
       next = upcoming ? "Далі · " + upcoming.text : "Останній рядок";
+    } else if (song.videoId || song.audioUrl) {
+      const upcoming = song.lines.find((cue) => cue.start > position);
+      label = song.videoId && !video.playing ? "Відео запускається" : "Караоке";
+      line = first ? "Музична пауза" : song.videoId ? "Співайте за текстом у відео" : "Грає мінусовка";
+      next = upcoming ? "Далі · " + upcoming.text : "";
     } else {
       label = "Фінал";
       line = "Останні такти";
@@ -117,8 +136,10 @@ function renderLyrics() {
     label = "Пісня завершилась";
     line = "Дякуємо за дует!";
     next = host ? "Можна повторити або обрати іншу пісню." : "Ведучий може почати знову або обрати іншу пісню.";
-  } else {
+  } else if (first) {
     next = (host ? "Ви починаєте синьою партією" : "Друг починає синьою партією") + " · " + next;
+  } else if (song.videoId) {
+    next = "Караоке відкриється під текстом.";
   }
   const lyrics = [part, label, line, next].join("\n");
   if (lyrics !== lastLyrics) {
@@ -128,18 +149,22 @@ function renderLyrics() {
     $("next-line").textContent = next;
     lastLyrics = lyrics;
   }
-  const elapsed = finished ? song.duration : Math.min(song.duration, Math.max(0, position ?? 0));
-  $("stage-time").textContent = duration(elapsed) + " / " + duration(song.duration);
-  $("progress").max = song.duration;
+  const elapsed = finished ? total : Math.min(total, Math.max(0, position ?? 0));
+  $("stage-time").textContent = duration(elapsed) + " / " + (total ? duration(total) : "—");
+  $("progress").max = total || 1;
   $("progress").value = elapsed;
 }
 
 function tick() {
   if (!playback) return;
-  if (audio.position >= state.song.duration) {
+  if (state.song.videoId ? video.ended : audio.position >= songDuration()) {
     endPlayback(true);
     message("Пісня завершилась.");
     return;
+  }
+  if (host && state.song.videoId && video.playing && clock() - lastVideoSync > 3500) {
+    lastVideoSync = clock();
+    connection.send({ type: "video-position", at: lastVideoSync, position: video.position, playback });
   }
   renderLyrics();
   frame = requestAnimationFrame(tick);
@@ -148,6 +173,8 @@ function tick() {
 function endPlayback(completed = false) {
   cancelAnimationFrame(frame);
   audio.stop();
+  video.stop();
+  $("video-resume").hidden = true;
   playback = null;
   finished = completed;
   render();
@@ -157,7 +184,7 @@ function schedule(startAt) {
   try {
     const delay = (startAt - clock() - (host ? 0 : clockSample.offset)) / 1000;
     if (delay < -1 || delay > 8) throw new Error("Clock unavailable");
-    audio.play(delay);
+    music().play(delay);
     finished = false;
     playback = startAt;
     message("");
@@ -179,20 +206,55 @@ function sendSeat() { connection?.send({ type: "seat", song: state.song.id, ...s
 
 function changeSong(song, sync = false) {
   if (song.id === state.song.id) return;
+  endPlayback();
+  video.clear();
   state.song = song;
   state.me.ready = false;
   state.other.ready = false;
-  endPlayback();
-  if (sync) connection?.send({ type: "song", id: song.id });
+  if (sync) sendSong();
   if (state.active) {
     sendSeat();
     if (state.voice) message("Пісню змінено. Підтвердьте готовність.");
   }
+  if (state.active && song.videoId) prepareVideo();
   render();
+}
+
+function sendSong() {
+  const song = state.song;
+  connection?.send(song.videoId || song.audioUrl ? { type: "song", external: song } : { type: "song", id: song.id });
+}
+
+function prepareVideo() {
+  const song = state.song;
+  return video.load(song.videoId).then(render).catch(() => {
+    if (state.active && song === state.song) onVideo("error");
+  });
+}
+
+function onVideo(event) {
+  if (event === "blocked") {
+    $("video-resume").hidden = false;
+    message("Натисни «Увімкнути відео», щоб приєднатися до відтворення.");
+  } else if (event === "playing") {
+    $("video-resume").hidden = true;
+    message("");
+  } else if (event === "error") {
+    const wasPlaying = !!playback;
+    endPlayback();
+    state.me.ready = false;
+    sendSeat();
+    if (wasPlaying) connection?.send({ type: host ? "stop" : "start-failed" });
+    message(host ? "Це відео не відтворюється тут. Спробуй інше посилання." : "Це відео не відтворюється тут. Попроси ведучого змінити посилання.");
+    render();
+  } else {
+    renderLyrics();
+  }
 }
 
 function updateVolumes() {
   audio.volume($("music-volume").valueAsNumber / 100, $("voice-volume").valueAsNumber / 100);
+  video.setVolume($("music-volume").valueAsNumber);
 }
 
 function syncClock() {
@@ -208,7 +270,7 @@ function onMessage(data) {
       render();
       break;
     case "song": {
-      const song = songs.find(({ id }) => id === data.id);
+      const song = songs.find(({ id }) => id === data.id) || validateExternalSong(data.external);
       if (!host && song) changeSong(song);
       break;
     }
@@ -245,6 +307,13 @@ function onMessage(data) {
         message("Ведучий зупинив пісню.");
       }
       break;
+    case "video-position":
+      if (!host && playback && data.playback === playback && state.song.videoId && clockSample &&
+          Number.isFinite(data.at) && Number.isFinite(data.position)) {
+        const elapsed = (clock() + clockSample.offset - data.at) / 1000;
+        if (elapsed >= 0 && elapsed < 3) video.align(data.position + elapsed);
+      }
+      break;
   }
 }
 
@@ -277,7 +346,7 @@ function onConnection(event, remote) {
     state.joined = true;
     $("retry").hidden = true;
     message("Обидва в кімнаті. Увімкніть мікрофони.");
-    if (host) connection.send({ type: "song", id: state.song.id });
+    if (host) sendSong();
     else {
       syncClock();
       setTimeout(syncClock, 250);
@@ -323,6 +392,7 @@ $("enter").onclick = () => {
   state.active = true;
   $("catalog-status").textContent = "";
   openConnection();
+  if (state.song.videoId) prepareVideo();
   render();
   $("room-title").focus();
 };
@@ -401,13 +471,17 @@ $("ready").onclick = async () => {
   render();
   try {
     await audio.unlock();
-    await audio.load(selected);
+    if (selected.videoId) await video.load(selected.videoId);
+    else await audio.load(selected);
     if (!state.active || !state.voice || connection !== currentConnection || selected !== state.song) return;
     state.me.ready = true;
     sendSeat();
     message(host ? "Коли друг буде готовий, можна починати." : "Ти готовий. Ведучий запустить пісню.");
   } catch {
-    if (state.active) message("Не вдалося завантажити фонограму. Натисни «Готовий» ще раз.");
+    if (state.active && selected === state.song) {
+      message(selected.videoId ? "Не вдалося завантажити відео. Перевір посилання або спробуй інше." :
+        "Не вдалося завантажити фонограму. Натисни «Готовий» ще раз.");
+    }
   } finally {
     readyPending = false;
     render();
@@ -427,6 +501,7 @@ $("stop").onclick = () => {
 };
 
 $("retry").onclick = () => openConnection();
+$("video-resume").onclick = () => video.resume();
 $("unlock").onclick = async () => {
   try {
     await Promise.all([audio.unlock(), remotePlayback?.play()]);
@@ -437,6 +512,7 @@ $("unlock").onclick = async () => {
 function leave() {
   connection?.close();
   resetPartner();
+  video.clear();
   stream?.getTracks().forEach((track) => track.stop());
   stream = undefined;
   state.me = blankSeat();
@@ -459,16 +535,99 @@ window.addEventListener("pagehide", (event) => {
 $("music-volume").oninput = updateVolumes;
 $("voice-volume").oninput = updateVolumes;
 
-for (const song of songs) {
+function openVideoForm(track) {
+  selectedTrack = track;
+  const terms = track ? [track.artistName, track.trackName].filter(Boolean).join(" ") : $("search-query").value.trim();
+  const url = new URL("https://www.youtube.com/results");
+  url.searchParams.set("search_query", [terms, "karaoke instrumental"].filter(Boolean).join(" "));
+  $("find-backing").href = url.href;
+  $("video-title").textContent = track ? track.trackName : "Додати караоке";
+  $("video-url").value = "";
+  $("lyric-offset").value = "0";
+  $("offset-label").hidden = !track?.syncedLyrics;
+  $("video-status").textContent = track && !track.syncedLyrics ? "Для цієї версії потрібне відео з текстом." : "";
+  $("video-form").hidden = false;
+  $("video-url").focus();
+}
+
+$("open-video-form").onclick = () => openVideoForm();
+$("song-search").onsubmit = async (event) => {
+  event.preventDefault();
+  const query = $("search-query").value.trim();
+  if (query.length < 2) {
+    $("search-status").textContent = "Введи хоча б дві літери.";
+    return;
+  }
+  if (youtubeId(query) || backingAudioUrl(query)) {
+    openVideoForm();
+    $("video-url").value = query;
+    return;
+  }
+  searchRequest?.abort();
+  const request = new AbortController();
+  searchRequest = request;
+  const timer = setTimeout(() => request.abort(), 10000);
+  $("search-results").replaceChildren();
+  $("search-status").textContent = "Шукаємо пісні…";
+  $("video-form").hidden = true;
+  try {
+    const tracks = await searchTracks(query, request.signal);
+    if (request !== searchRequest) return;
+    $("search-status").textContent = tracks.length ? "Обери потрібну версію пісні." :
+      "Пісень не знайдено. Спробуй іншу назву або додай посилання на караоке.";
+    for (const track of tracks) {
+      const button = songButton({
+        title: track.trackName, genre: [track.artistName, track.syncedLyrics ? "Текст з таймкодами" : ""].filter(Boolean).join(" · "),
+        duration: track.duration, icon: "♪", color: track.syncedLyrics ? "#a7baff" : "#ffcb9d",
+      });
+      button.onclick = () => openVideoForm(track);
+      $("search-results").append(button);
+    }
+  } catch {
+    if (request === searchRequest) $("search-status").textContent = "Пошук тимчасово недоступний. Спробуй знову або додай посилання на караоке.";
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+$("video-form").onsubmit = (event) => {
+  event.preventDefault();
+  const source = $("video-url").value;
+  const videoId = youtubeId(source);
+  const audioUrl = backingAudioUrl(source);
+  if (!videoId && !audioUrl) {
+    $("video-status").textContent = "Встав посилання на відео з YouTube або пряме HTTPS-посилання на аудіофайл.";
+    return;
+  }
+  const offset = Math.max(-120, Math.min(120, $("lyric-offset").valueAsNumber || 0));
+  const query = $("search-query").value;
+  const title = youtubeId(query) || backingAudioUrl(query) ? "" : query;
+  const song = externalSong(selectedTrack, { videoId, audioUrl }, offset, title);
+  if (!song) {
+    $("video-status").textContent = "Не вдалося підготувати цю версію пісні.";
+    return;
+  }
+  changeSong(song, state.active);
+  $("video-status").textContent = state.active ? "Пісню обрано для обох." : "Для нової кімнати обрано «" + song.title + "».";
+  if (state.active) $("room-title").focus();
+  else $("enter").focus();
+};
+
+function songButton(song) {
   const button = document.createElement("button");
   button.className = "song";
   button.type = "button";
-  button.dataset.song = song.id;
   button.style.setProperty("--cover", song.color);
-  button.innerHTML = '<span class="cover" aria-hidden="true"></span><span class="song-copy"><span class="song-title"></span><span class="song-meta"></span></span><span class="song-action" aria-hidden="true"></span>';
+  button.innerHTML = '<span class="cover" aria-hidden="true"></span><span class="song-copy"><span class="song-title"></span><span class="song-meta"></span></span><span class="song-action" aria-hidden="true">↗</span>';
   button.querySelector(".cover").textContent = song.icon;
   button.querySelector(".song-title").textContent = song.title;
-  button.querySelector(".song-meta").textContent = song.genre + " · " + duration(song.duration);
+  button.querySelector(".song-meta").textContent = [song.genre, song.duration > 0 ? duration(song.duration) : ""].filter(Boolean).join(" · ");
+  return button;
+}
+
+for (const song of songs) {
+  const button = songButton(song);
+  button.dataset.song = song.id;
   button.onclick = () => {
     changeSong(song, state.active && host);
     if (!state.active && host) $("catalog-status").textContent = "Для нової кімнати обрано «" + song.title + "».";
