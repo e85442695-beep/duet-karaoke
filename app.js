@@ -36,6 +36,7 @@ let selectedTrack;
 let trackResults = [];
 let lyricTimeline;
 let lyricOffset = 0;
+let lyricStart = null;
 const music = () => state.song.videoId ? video : audio;
 const songDuration = () => {
   if (state.song.videoId) return video.duration;
@@ -105,9 +106,11 @@ function renderLyrics() {
   const position = music().position;
   const total = songDuration();
   const mediaDuration = Math.round(total * 10) / 10;
-  if (lyricTimeline?.song !== song || lyricTimeline.mediaDuration !== mediaDuration) {
-    lyricTimeline = { song, mediaDuration, ...adaptLyrics(song, mediaDuration) };
+  if (lyricTimeline?.song !== song || lyricTimeline.mediaDuration !== mediaDuration || lyricTimeline.start !== lyricStart) {
+    lyricTimeline = { song, mediaDuration, start: lyricStart, ...adaptLyrics(song, mediaDuration, lyricStart) };
     $("timing-note").hidden = !lyricTimeline.approximate;
+    $("timing-note").textContent = lyricTimeline.waiting ?
+      "У цієї пісні немає таймкодів. Натисни «Почали співати перший рядок», коли почнеться спів." : "Орієнтовний таймінг тексту";
   }
   const { lines, intro } = lyricTimeline;
   const at = position === null ? null : position - lyricOffset;
@@ -121,6 +124,10 @@ function renderLyrics() {
     label = "Починаємо за";
     line = String(Math.max(1, Math.ceil(-position)));
     next = first ? "Перший рядок · " + firstText : "";
+  } else if (position !== null && lyricTimeline.waiting && !finished) {
+    label = "Вступ";
+    line = "Чекаємо на перший рядок";
+    next = "Натисни «Почали співати перший рядок» · " + firstText;
   } else if (position !== null && at < intro) {
     label = "Вступ";
     line = "Приготуйся співати";
@@ -175,26 +182,32 @@ function renderSync() {
   $("lyric-sync").hidden = !syncable();
   const tenths = Math.round(lyricOffset * 10) / 10;
   $("sync-value").textContent = (tenths > 0 ? "+" : tenths < 0 ? "−" : "") + Math.abs(tenths).toFixed(1) + " с";
-  $("sync-reset").hidden = tenths === 0;
+  $("sync-reset").hidden = tenths === 0 && lyricStart === null;
   $("sync-first").hidden = !playback;
 }
 
-function setOffset(value, send = true) {
+function sendOffset() {
+  connection?.send({ type: "offset", song: state.song.id, value: lyricOffset, start: lyricStart });
+}
+
+function setOffset(value, send = true, start = lyricStart) {
   lyricOffset = Math.max(-60, Math.min(60, Math.round(value * 10) / 10));
+  lyricStart = Number.isFinite(start) && start >= 0 ? Math.round(start * 10) / 10 : null;
   lastLyrics = "";
-  if (send) connection?.send({ type: "offset", song: state.song.id, value: lyricOffset });
+  if (send) sendOffset();
   renderSync();
   renderLyrics();
 }
 
 $("sync-earlier").onclick = () => setOffset(lyricOffset - 0.5);
 $("sync-later").onclick = () => setOffset(lyricOffset + 0.5);
-$("sync-reset").onclick = () => setOffset(0);
+$("sync-reset").onclick = () => setOffset(0, true, null);
 $("sync-first").onclick = () => {
   const position = music().position;
   const first = lyricTimeline?.lines[0];
   if (position === null || position < 0 || !first) return;
-  setOffset(position - first.start);
+  if (lyricTimeline.estimated) setOffset(0, true, position);
+  else setOffset(position - first.start);
 };
 
 function tick() {
@@ -252,6 +265,7 @@ function changeSong(song, sync = false) {
   video.clear();
   state.song = song;
   lyricOffset = 0;
+  lyricStart = null;
   state.me.ready = false;
   state.other.ready = false;
   if (sync) sendSong();
@@ -318,7 +332,7 @@ function onMessage(data) {
       break;
     }
     case "offset":
-      if (data.song === state.song.id && Number.isFinite(data.value)) setOffset(data.value, false);
+      if (data.song === state.song.id && Number.isFinite(data.value)) setOffset(data.value, false, data.start);
       break;
     case "ping":
       if (host && Number.isFinite(data.sent)) connection.send({ type: "pong", sent: data.sent, hostAt: clock() });
@@ -394,7 +408,7 @@ function onConnection(event, remote) {
     message("Обидва в кімнаті. Увімкніть мікрофони.");
     if (host) {
       sendSong();
-      if (lyricOffset) connection.send({ type: "offset", song: state.song.id, value: lyricOffset });
+      if (lyricOffset || lyricStart !== null) sendOffset();
     } else {
       syncClock();
       setTimeout(syncClock, 250);

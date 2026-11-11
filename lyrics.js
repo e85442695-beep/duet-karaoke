@@ -91,9 +91,9 @@ export function lyricReference(track, duration) {
   return { duration, lines, timing: lines.length ? "estimated" : "none" };
 }
 
-function estimate(lines, duration) {
-  const intro = Math.min(8, duration * 0.06);
+function estimate(lines, duration, anchor) {
   const outro = Math.min(5, duration * 0.03);
+  const intro = anchor ?? 0;
   const weights = lines.map(({ text }) => Math.sqrt(Math.max(1, lineKey(text).length)));
   const total = weights.reduce((sum, weight) => sum + weight, 0);
   const step = (duration - intro - outro) / total;
@@ -106,8 +106,10 @@ function estimate(lines, duration) {
   });
 }
 
-export function adaptLyrics(song, mediaDuration) {
-  if (!song.timing || song.timing === "none") return { lines: song.lines, intro: song.intro, approximate: false };
+// Lyrics without timestamps can't know when the singing starts, so they wait at the intro
+// until `start` (the moment someone marks the first sung line) is known.
+export function adaptLyrics(song, mediaDuration, start = null) {
+  if (!song.timing || song.timing === "none") return { lines: song.lines, intro: song.intro, approximate: false, waiting: false };
   const duration = mediaDuration > 0 ? mediaDuration : song.duration;
   let reference = song;
   if (mediaDuration > 0) {
@@ -120,8 +122,9 @@ export function adaptLyrics(song, mediaDuration) {
   // Karaoke videos usually differ by a longer intro or outro, not by tempo, so stretching
   // every timestamp makes lines drift. Only stretch when the length differs a lot.
   const scale = Math.abs(reference.duration - duration) > reference.duration * 0.12 ? duration / reference.duration : 1;
-  const lines = estimated ? estimate(reference.lines, duration) : reference.lines.map((line) => ({
+  const anchor = start === null ? null : Math.max(0, Math.min(start, duration * 0.9));
+  const lines = estimated ? estimate(reference.lines, duration, anchor) : reference.lines.map((line) => ({
     ...line, start: line.start * scale, duration: line.duration * scale,
   }));
-  return { lines, intro: lines[0]?.start || 0, approximate: estimated || scale !== 1 };
+  return { lines, intro: lines[0]?.start || 0, approximate: estimated || scale !== 1, estimated, waiting: estimated && anchor === null };
 }
