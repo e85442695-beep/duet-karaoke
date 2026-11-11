@@ -51,6 +51,7 @@
             <p id="next-line" class="next-line"></p>
           </div>
           <progress id="progress" aria-label="Позиція пісні" max="1" value="0"></progress>
+          <p id="timing-note" class="status" hidden>Орієнтовний таймінг тексту</p>
           <div class="transport">
             <button id="start" class="primary" type="button" disabled>Почати співати</button>
             <button id="stop" class="quiet" type="button" hidden>Зупинити</button>
@@ -96,9 +97,7 @@
             <input id="video-url" type="text" inputmode="url" maxlength="500" placeholder="https://www.youtube.com/watch?v=…" required>
             <button id="select-video" class="primary" type="submit">Обрати пісню</button>
           </div>
-          <label id="offset-label" class="offset-label" hidden>Зсув тексту, секунди
-            <input id="lyric-offset" type="number" min="-120" max="120" step="0.1" value="0">
-          </label>
+          <p id="sync-hint" class="status"></p>
           <p id="video-status" class="status" role="status"></p>
         </form>
       </div>

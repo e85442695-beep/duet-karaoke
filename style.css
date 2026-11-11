@@ -73,7 +73,7 @@ h1,h2,p { margin-top: 0; }
 .catalog { border-top: 1px solid var(--line); padding: 27px 0 42px; scroll-margin-top: 18px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .song-search { display: flex; gap: 8px; max-width: 720px; }
-.song-search input, .offset-label input { min-width: 0; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 10px; padding: 11px 13px; }
+.song-search input { min-width: 0; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 10px; padding: 11px 13px; }
 .song-search input { flex: 1; width: 100%; }
 .song-search input::placeholder { color: var(--muted); }
 .song-search button { flex: none; }
@@ -82,8 +82,6 @@ h1,h2,p { margin-top: 0; }
 .video-form { padding: 17px; background: var(--panel); border: 1px solid var(--line); border-radius: 13px; margin-top: 8px; }
 .video-form h3, .starter-heading { margin: 0; font-size: .95rem; }
 .video-form label { display: block; font-size: .86rem; color: var(--muted); margin: 8px 0; }
-.video-form .offset-label { display: flex; gap: 9px; align-items: center; margin-top: 12px; }
-.offset-label input { width: 84px; }
 .starter-heading { margin: 22px 0 10px; color: var(--muted); }
 .video-stage { width: min(100%, 720px); aspect-ratio: 16 / 9; min-height: 200px; margin-top: 15px; background: #0b0b11; border-radius: 12px; overflow: hidden; }
 .video-stage iframe { display: block; width: 100%; height: 100%; min-height: 200px; border: 0; }
@@ -116,6 +114,7 @@ h1,h2,p { margin-top: 0; }
 .part-label { color: var(--part); font-size: .8rem; font-weight: 700; margin-bottom: 10px; }
 .current-line { color: var(--part); font-weight: 810; font-size: clamp(1.8rem, 4vw, 3.1rem); line-height: 1.12; letter-spacing: -.055em; margin-bottom: 12px; }
 .next-line { color: var(--muted); font-size: clamp(.85rem, 1.5vw, 1.05rem); line-height: 1.45; margin: 0; }
+.current-line, .next-line { min-width: 0; overflow-wrap: anywhere; }
 progress { width: 100%; height: 6px; display: block; border: none; background: #36374d; border-radius: 8px; overflow: hidden; color: var(--peach); }
 progress::-webkit-progress-bar { background: #36374d; }
 progress::-webkit-progress-value { background: var(--peach); }

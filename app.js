@@ -3,6 +3,7 @@ import { DuetAudio } from "./audio.js";
 import { clock, DuetConnection } from "./connection.js";
 import { backingAudioUrl, externalSong, searchTracks, validateExternalSong, youtubeId } from "./song-search.js";
 import { VideoTrack } from "./video.js";
+import { adaptLyrics } from "./lyrics.js";
 
 const $ = (id) => document.getElementById(id);
 const audio = new DuetAudio();
@@ -32,6 +33,8 @@ let readyPending = false;
 let lastVideoSync = 0;
 let searchRequest;
 let selectedTrack;
+let trackResults = [];
+let lyricTimeline;
 const music = () => state.song.videoId ? video : audio;
 const songDuration = () => {
   if (state.song.videoId) return video.duration;
@@ -97,33 +100,39 @@ function render() {
 
 function renderLyrics() {
   const song = state.song;
-  const first = song.lines[0];
   const position = music().position;
   const total = songDuration();
+  const mediaDuration = Math.round(total * 10) / 10;
+  if (lyricTimeline?.song !== song || lyricTimeline.mediaDuration !== mediaDuration) {
+    lyricTimeline = { song, mediaDuration, ...adaptLyrics(song, mediaDuration) };
+    $("timing-note").hidden = !lyricTimeline.approximate;
+  }
+  const { lines, intro } = lyricTimeline;
+  const first = lines[0];
   const firstText = first?.text || (song.videoId ? "Текст у відео" : "Текст із таймкодами відсутній");
   let part = first?.part || "blue";
   let label = "До початку";
   let line = firstText;
-  let next = song.lines[1]?.text || "";
+  let next = lines[1]?.text || "";
   if (position !== null && position < 0) {
     label = "Починаємо за";
     line = String(Math.max(1, Math.ceil(-position)));
     next = first ? "Перший рядок · " + firstText : "";
-  } else if (position !== null && position < song.intro) {
+  } else if (position !== null && position < intro) {
     label = "Вступ";
     line = "Приготуйся співати";
     next = "Перший рядок · " + firstText;
   } else if (position !== null) {
-    const index = song.lines.findIndex((cue) => position >= cue.start && position < cue.start + cue.duration);
+    const index = lines.findIndex((cue) => position >= cue.start && position < cue.start + cue.duration);
     if (index >= 0) {
-      const cue = song.lines[index];
-      const upcoming = song.lines[index + 1];
+      const cue = lines[index];
+      const upcoming = lines[index + 1];
       part = cue.part;
       label = (part === ownPart ? "Твоя партія" : "Партія друга") + (part === "blue" ? " · синя" : " · червона");
       line = cue.text;
       next = upcoming ? "Далі · " + upcoming.text : "Останній рядок";
     } else if (song.videoId || song.audioUrl) {
-      const upcoming = song.lines.find((cue) => cue.start > position);
+      const upcoming = lines.find((cue) => cue.start > position);
       label = song.videoId && !video.playing ? "Відео запускається" : "Караоке";
       line = first ? "Музична пауза" : song.videoId ? "Співайте за текстом у відео" : "Грає мінусовка";
       next = upcoming ? "Далі · " + upcoming.text : "";
@@ -543,9 +552,9 @@ function openVideoForm(track) {
   $("find-backing").href = url.href;
   $("video-title").textContent = track ? track.trackName : "Додати караоке";
   $("video-url").value = "";
-  $("lyric-offset").value = "0";
-  $("offset-label").hidden = !track?.syncedLyrics;
-  $("video-status").textContent = track && !track.syncedLyrics ? "Для цієї версії потрібне відео з текстом." : "";
+  $("video-status").textContent = "";
+  $("sync-hint").textContent = track?.syncedLyrics ? "Сайт підлаштує рядки під тривалість мінусовки." :
+    track?.plainLyrics ? "Час появи рядків буде орієнтовним." : "";
   $("video-form").hidden = false;
   $("video-url").focus();
 }
@@ -573,11 +582,13 @@ $("song-search").onsubmit = async (event) => {
   try {
     const tracks = await searchTracks(query, request.signal);
     if (request !== searchRequest) return;
+    trackResults = tracks;
     $("search-status").textContent = tracks.length ? "Обери потрібну версію пісні." :
       "Пісень не знайдено. Спробуй іншу назву або додай посилання на караоке.";
     for (const track of tracks) {
       const button = songButton({
-        title: track.trackName, genre: [track.artistName, track.syncedLyrics ? "Текст з таймкодами" : ""].filter(Boolean).join(" · "),
+        title: track.trackName, genre: [track.artistName, track.syncedLyrics ? "Текст з таймкодами" :
+          track.plainLyrics ? "Текст без таймкодів" : ""].filter(Boolean).join(" · "),
         duration: track.duration, icon: "♪", color: track.syncedLyrics ? "#a7baff" : "#ffcb9d",
       });
       button.onclick = () => openVideoForm(track);
@@ -599,10 +610,9 @@ $("video-form").onsubmit = (event) => {
     $("video-status").textContent = "Встав посилання на відео з YouTube або пряме HTTPS-посилання на аудіофайл.";
     return;
   }
-  const offset = Math.max(-120, Math.min(120, $("lyric-offset").valueAsNumber || 0));
   const query = $("search-query").value;
   const title = youtubeId(query) || backingAudioUrl(query) ? "" : query;
-  const song = externalSong(selectedTrack, { videoId, audioUrl }, offset, title);
+  const song = externalSong(selectedTrack, { videoId, audioUrl }, title, trackResults);
   if (!song) {
     $("video-status").textContent = "Не вдалося підготувати цю версію пісні.";
     return;
